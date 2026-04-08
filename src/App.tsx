@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import Grid from "./components/Grid.tsx";
 import Buttons from "./components/Buttons.tsx";
 import Timer from "./components/Timer.tsx";
@@ -9,6 +10,7 @@ import { AuthProvider } from "./components/auth/AuthContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Logout from "pixelarticons/svg/logout.svg";
 import HowToPlayPopup from "./components/HowtoPlayPopup.tsx";
+import WinPopup from "./components/WinPopup.tsx";
 
 import {Canvas} from "@react-three/fiber";
 import {Stars} from "@react-three/drei";
@@ -18,11 +20,15 @@ const App: React.FC = () => {
   const [rowHints, setRowHints] = useState<number[][]>([]);
   const [colHints, setColHints] = useState<number[][]>([]);
   const [resetTimer, setResetTimer] = useState(false);
-  const [showHowToPlay, setShowHowToPlay] = useState(false); // State for popup visibility
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [showWinPopup, setShowWinPopup] = useState(false);
+  const [isNewHighscore, setIsNewHighscore] = useState(false);
   const [highScore, setHighScore] = useState<number>(0);
   const [highscorePrint, setHighscorePrint] = useState<string>("0:00:00");
   const [username, setUsername] = useState<string>("Loading...")
   const [currentScore, setCurrentScore] = useState<number>(0);
+
+  const SIZES: (5 | 10 | 15)[] = [5, 10, 15];
 
   useEffect(() => {
     generateGame();
@@ -150,13 +156,17 @@ const App: React.FC = () => {
   };
 
   const handleWin = async () => {
-    alert("You won lmaoo");
+    const newHS = currentScore < highScore || highScore == null;
+    setIsNewHighscore(newHS);
+    setShowWinPopup(true);
     getHighscore();
+    if (newHS) updateHS();
+  };
 
-    if (currentScore < highScore || highScore == null) {
-      updateHS();
-      alert("New Highscore!!");
-    }
+  const handlePlayAgain = () => {
+    setShowWinPopup(false);
+    setIsNewHighscore(false);
+    generateGame();
   };
 
   const handleTimerComplete = (timeTaken: number) => {
@@ -173,9 +183,73 @@ const App: React.FC = () => {
             element={
               <ProtectedRoute>
                 <>
-                <div className="flex flex-col min-h-screen relative z-10 text-white">
+                <div className="flex flex-col min-h-screen relative z-10 text-white scanlines">
+
+                  {/* ── Navbar ── */}
+                  <nav className="font-vt323 w-full flex items-center justify-between px-4 py-2 border-b-2 border-[#c9a227] bg-[#0f0f1c] bg-opacity-90 backdrop-blur-sm sticky top-0 z-20">
+
+                    {/* Left — title */}
+                    <motion.span
+                      className="title-glow text-3xl md:text-4xl tracking-widest select-none"
+                      animate={{ y: [-2, 2, -2] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      NONOGRAM
+                    </motion.span>
+
+                    {/* Center — size tabs */}
+                    <div className="flex gap-1">
+                      {SIZES.map(size => {
+                        const locked = size !== 5;
+                        return (
+                          <div key={size} className="relative group">
+                            <button
+                              disabled={locked}
+                              onClick={() => {/* locked sizes are disabled */}}
+                              className={`text-2xl tracking-widest px-3 py-1 border-2 transition-colors duration-100
+                                ${locked
+                                  ? "border-gray-700 text-gray-600 cursor-not-allowed"
+                                  : size === 5
+                                    ? "bg-[#c9a227] text-[#0b0b14] border-[#e8b430]"
+                                    : "bg-transparent text-[#c9a227] border-[#c9a227] hover:bg-[#c9a227] hover:text-[#0b0b14]"
+                                }`}
+                            >
+                              {size}×{size}
+                            </button>
+                            {locked && (
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-[#0f0f1c] border border-[#c9a227] text-[#c9a227] text-lg px-2 py-1 whitespace-nowrap">
+                                COMING SOON
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Right — user info + logout */}
+                    <div className="flex items-center gap-3 text-xl">
+                      <div className="hidden md:flex flex-col items-end leading-tight">
+                        <span className="text-[#e8b430]">{username}</span>
+                        <span className="text-gray-400 text-lg">BEST {highscorePrint}</span>
+                      </div>
+                      <button
+                        onClick={handleLogout}
+                        title="Logout"
+                        className="border-2 border-[#c9a227] p-1 hover:bg-[#c9a227] transition-colors group"
+                      >
+                        <img
+                          src={Logout}
+                          alt="Logout"
+                          className="w-5 h-5"
+                          style={{ filter: 'invert(70%) sepia(80%) saturate(400%) hue-rotate(5deg)' }}
+                        />
+                      </button>
+                    </div>
+                  </nav>
+
+                  {/* ── Main game area ── */}
                   <main className="flex-1 flex flex-col items-center justify-center p-4">
-                    <div className="relative flex flex-col items-center gap-4">
+                    <div className="flex flex-col items-center gap-4">
                       <Timer
                         resetTimer={resetTimer}
                         onResetComplete={() => setResetTimer(false)}
@@ -188,30 +262,23 @@ const App: React.FC = () => {
                         calculateHints={calculateHints}
                         winCallBack={handleWin}
                       />
-                      <div className="flex gap-2 mt-4">
                       <Buttons
-                        onClick={generateGame} // Existing function for the repeat button
-                        onHowToPlayClick={() => setShowHowToPlay(true)} // Function to show the popup
+                        onClick={() => generateGame()}
+                        onHowToPlayClick={() => setShowHowToPlay(true)}
                       />
-                      </div>
-                    </div>
-                    <div className="font-vt323 text-2xl hidden md:block top-5 left-1/2 transform -translate-x-1/2 bg-gray-800 p-4 rounded-lg shadow-lg md:absolute md:left-auto md:right-4 md:transform-none relative">
-                      <h3 className="text-3xl font-bold">User Info</h3>
-                      <p>Name: {username}</p>
-                      <p>Lowest time: {highscorePrint}</p>
-                      <button 
-                        onClick={handleLogout} 
-                        className="absolute top-2 right-2 p-[5px] rounded-md text-black bg-gray-100"
-                      >
-                        <img src={Logout} alt="Repeat" className="max-w-[20px] max-h-[20px] h-[8vw]" />
-                      </button>
-                      {/* How to Play Popup */}
-                      {showHowToPlay && (
-                        <HowToPlayPopup isVisible={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
-                      )}
                     </div>
                   </main>
                 </div>
+
+                {/* How to Play Popup */}
+                <HowToPlayPopup isVisible={showHowToPlay} onClose={() => setShowHowToPlay(false)} />
+                {/* Win Popup */}
+                <WinPopup
+                  isVisible={showWinPopup}
+                  isNewHighscore={isNewHighscore}
+                  time={highscorePrint}
+                  onPlayAgain={handlePlayAgain}
+                />
                 {/* Canvas for Stars */}
                 <div className="fixed inset-0 z-0 pointer-events-none bg-gray-900">
                   <Canvas>

@@ -182,24 +182,33 @@ app.get('/get-dailyConditions', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/user-played', authenticateToken, async (req, res) => {
+app.post('/start-daily', authenticateToken, async (req, res) => {
   try {
-    const username = req.user.username; 
-
-    // Find the user and update the `alreadyPlayed` field
+    const username = req.user.username;
     const user = await User.findOne({ username });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.guest) return res.status(403).json({ message: "Guests can't play the daily challenge", guest: true });
+    if (user.alreadyPlayed) return res.status(403).json({ message: 'Already played today', alreadyPlayed: true });
+
+    const today = new Date().toISOString().split('T')[0];
+    let dailyPuzzle = await DailyPuzzle.findOne({ date: today });
+
+    if (!dailyPuzzle) {
+      const grid = createGrid(5);
+      const { rowHints, colHints } = calculateHints(grid);
+      dailyPuzzle = new DailyPuzzle({ grid, rowHints, colHints, date: today });
+      await dailyPuzzle.save();
     }
 
+    // Atomically mark as played and record server-side start time
     user.alreadyPlayed = true;
-    await user.save(); // Save the updated user document
+    user.dailyStartTime = new Date();
+    await user.save();
 
-    res.status(201).json({ message: 'User updated successfully' });
-
+    res.status(200).json({ puzzle: dailyPuzzle });
   } catch (err) {
-    res.status(500).json({ message: 'Error updating user', error: err.message });
+    res.status(500).json({ message: 'Error starting daily challenge', error: err.message });
   }
 });
 
@@ -242,27 +251,27 @@ app.post('/register', async (req, res) => {
 
 app.post('/add-ranking', authenticateToken, async (req, res) => {
   try {
-    const { time } = req.body;
-    const token = req.cookies?.accessToken;
+    const username = req.user.username;
+    const user = await User.findOne({ username });
 
-    if (!token) {
-      return res.status(400).json({ message: 'Access token missing' });
-    }
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user.dailyStartTime) return res.status(400).json({ message: 'No active game session found' });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const username = decoded.username;
-    const date = new Date(); // Save the current date as a Date object
+    // Validate that the session started today
+    const today = new Date().toISOString().split('T')[0];
+    const startDay = user.dailyStartTime.toISOString().split('T')[0];
+    if (startDay !== today) return res.status(400).json({ message: 'Game session expired' });
 
-    await User.findOneAndUpdate(
-      { username },
-      { lastActive: Date.now() }
-    );  
+    // Compute elapsed time server-side — never trust the client
+    const elapsedSeconds = (Date.now() - user.dailyStartTime.getTime()) / 1000;
 
-    // Update the existing ranking or insert a new one
+    const date = new Date();
+    await User.findOneAndUpdate({ username }, { lastActive: date });
+
     const updatedRanking = await Ranking.findOneAndUpdate(
-      { username }, // Find by username
-      { time, date }, // Update time and date
-      { upsert: true, new: true } // Create if not exists, return the updated document
+      { username },
+      { time: elapsedSeconds, date },
+      { upsert: true, new: true }
     );
 
     res.status(201).json({ message: 'Ranking updated successfully', ranking: updatedRanking });

@@ -20,7 +20,6 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [ranking, setRanking] = useState<{ username: string; time: number }[]>([]);
-  const [currentTime, setCurrentTime] = useState<number>(0);
   const [alreadyPlayed, setAlreadyPlayed] = useState<boolean>(false);
 
   // Helper function to format time in MM:SS format
@@ -32,87 +31,41 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
 
   const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:3000';
 
-  // Fetch the alreadyPlayed status from the backend
-  const fetchAlreadyPlayed = async () => {
-    try {
-      // Only call fetchDailyChallenge if the user has NOT played yet
-      await fetchDailyChallenge();
-
-      const response = await fetch(`${API_BASE_URL}/get-dailyConditions`, {
-        credentials: 'include',
-      });
-  
-      if (!response.ok) {
-        throw new Error("Failed to fetch alreadyPlayed status.");
-      }
-  
-      const { alreadyPlayed, guest } = await response.json();
-      setAlreadyPlayed(alreadyPlayed);
-      
-
-      if (guest) {
-        setError("You can't see this as a guest, create an account :|");
-        setLoading(false);
-        return;
-      }
-  
-      if (alreadyPlayed) {
-        setError("You can only play once a day >:(");
-        setLoading(false);
-        return;
-      }
-    
-      updateUserPlayed();
-
-    } catch (error) {
-      console.error("Error in fetchAlreadyPlayed:", error);
-      setError(error instanceof Error ? error.message : "An unexpected error occurred.");
-      setLoading(false);
-    }
-  };
-
-  // Fetch the daily challenge from the backend
-  const fetchDailyChallenge = async () => {
+  // Start the daily challenge: server atomically checks alreadyPlayed,
+  // marks the user as played, records start time, and returns the puzzle.
+  const startDailyChallenge = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const fetchResponse = await fetch(`${API_BASE_URL}/get-daily`);
+      const response = await fetch(`${API_BASE_URL}/start-daily`, {
+        method: 'POST',
+        credentials: 'include',
+      });
 
-      if (!fetchResponse.ok) {
-        if (fetchResponse.status === 404) {
-          const createResponse = await fetch(`${API_BASE_URL}/create-daily`, {
-            method: "POST",
-          });
-
-          if (!createResponse.ok) {
-            throw new Error("Failed to create the daily challenge.");
-          }
-
-          const newChallengeResponse = await fetch(`${API_BASE_URL}/get-daily`);
-          if (!newChallengeResponse.ok) {
-            throw new Error("Failed to fetch the newly created challenge.");
-          }
-
-          const { puzzle: newPuzzle } = await newChallengeResponse.json();
-
-          setGrid(newPuzzle.grid);
-          setRowHints(newPuzzle.rowHints);
-          setColHints(newPuzzle.colHints);
-          setResetTimer(true);
+      if (response.status === 403) {
+        const data = await response.json();
+        if (data.guest) {
+          setError("You can't see this as a guest, create an account :|");
         } else {
-          throw new Error(`Failed to fetch the daily challenge. Status: ${fetchResponse.status}`);
+          setAlreadyPlayed(true);
+          setError("You can only play once a day >:(");
         }
-      } else {
-        // If fetch is successful, set the grid and hints
-        const { puzzle } = await fetchResponse.json();
-        setGrid(puzzle.grid);
-        setRowHints(puzzle.rowHints);
-        setColHints(puzzle.colHints);
-        setResetTimer(true);
+        setLoading(false);
+        return;
       }
+
+      if (!response.ok) {
+        throw new Error("Failed to start the daily challenge.");
+      }
+
+      const { puzzle } = await response.json();
+      setGrid(puzzle.grid);
+      setRowHints(puzzle.rowHints);
+      setColHints(puzzle.colHints);
+      setResetTimer(true);
     } catch (error) {
-      console.error("Error in fetchDailyChallenge:", error);
+      console.error("Error in startDailyChallenge:", error);
       setError(error instanceof Error ? error.message : "An unexpected error occurred.");
     } finally {
       setLoading(false);
@@ -134,36 +87,18 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
     }
   };
 
-  const handleTimerComplete = (timeTaken: number) => {
-    setCurrentTime(timeTaken);
-  };
-
-  const updateUserPlayed = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/user-played`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update user.");
-      }
-    } catch (err) {
-      console.error("Error in updateUser:", err);
-    }
+  const handleTimerComplete = (_timeTaken: number) => {
+    // Time is now computed server-side; nothing to do here
   };
 
   const addRanking = async () => {
     try {
+      // Time is computed server-side from dailyStartTime — we don't send it
       const response = await fetch(`${API_BASE_URL}/add-ranking`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ time: currentTime / 100 }), // Convert to seconds
         credentials: 'include',
       });
 
@@ -183,7 +118,7 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
   };
 
   useEffect(() => {
-    fetchAlreadyPlayed();
+    startDailyChallenge();
     fetchRanking();
   }, []);
 

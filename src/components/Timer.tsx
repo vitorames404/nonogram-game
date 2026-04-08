@@ -38,7 +38,7 @@ const Timer: React.FC<TimerProps> = ({ resetTimer, onResetComplete, onComplete }
 
   return (
     <div className="w-screen justify-center flex">
-      <div className="text-white font-vt323 text-5xl">
+      <div className="text-white font-vt323 text-5xl timer-glow">
         <p>
           {hours}:{minutes.toString().padStart(2, "0")}:
           {seconds.toString().padStart(2, "0")}:
