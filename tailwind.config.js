@@ -8,7 +8,7 @@ module.exports = {
     extend: {
       fontFamily: {
         openSans: ['"Open Sans"', 'sans-serif'],
-        vt323: ['"VT323"','serif'],
+        vt323: ['"Space Mono"', 'monospace'],
       },
     },
   },
