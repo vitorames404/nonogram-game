@@ -27,36 +27,42 @@ const App: React.FC = () => {
   const [highscorePrint, setHighscorePrint] = useState<string>("0:00:00");
   const [username, setUsername] = useState<string>("Loading...")
   const [currentScore, setCurrentScore] = useState<number>(0);
+  const [gridSize, setGridSize] = useState<5 | 10 | 15>(5);
+  const [highScore10, setHighScore10] = useState<number>(0);
+  const [highscorePrint10, setHighscorePrint10] = useState<string>("0:00:00");
 
   const SIZES: (5 | 10 | 15)[] = [5, 10, 15];
 
   useEffect(() => {
-    generateGame();
+    generateGame(5);
     getHighscore();
   }, []);
 
-  useEffect(() => {
-    formatTime(highScore);
-  }, [highScore]);
+  useEffect(() => { formatTime(highScore, setHighscorePrint); }, [highScore]);
+  useEffect(() => { formatTime(highScore10, setHighscorePrint10); }, [highScore10]);
 
-  const generateGame = () => {
-    const newGrid = createGrid(5);
+  const generateGame = (size: 5 | 10 | 15 = gridSize) => {
+    const newGrid = createGrid(size);
     setGrid(newGrid);
-
     const { rowHints, colHints } = calculateHints(newGrid);
     setRowHints(rowHints);
     setColHints(colHints);
-
     setResetTimer(true);
+  };
+
+  const handleSizeChange = (size: 5 | 10 | 15) => {
+    setGridSize(size);
+    setShowWinPopup(false);
+    generateGame(size);
   };
 
   const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:3000';
 
-  const formatTime = (centiseconds: number): void => {
+  const formatTime = (centiseconds: number, setter: (s: string) => void = setHighscorePrint): void => {
     const minutes = Math.floor((centiseconds / 100) / 60);
     const seconds = Math.floor((centiseconds / 100) % 60);
     const cs = centiseconds % 100;
-    setHighscorePrint(`${minutes}:${String(seconds).padStart(2, '0')}:${String(cs).padStart(2, '0')}`);
+    setter(`${minutes}:${String(seconds).padStart(2, '0')}:${String(cs).padStart(2, '0')}`);
   };
 
   const createGrid = (size: number): number[][] => {
@@ -98,33 +104,30 @@ const App: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/get-userinfo`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
       const data = await response.json();
-      setHighScore(data.highscore);
       setUsername(data.username);
+      setHighScore(data.highscore ?? 0);
+      setHighScore10(data.highscore10 ?? 0);
     } catch (err) {
-      console.error('Error checking username:', err);
+      console.error('Error fetching user info:', err);
     }
   };
 
-  const updateHS = async () => {
+  const updateHS = async (size: 5 | 10 | 15, score: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/update-highscore`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ highscore: currentScore }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ highscore: score, size }),
         credentials: 'include',
       });
-
       const data = await response.json();
       if (response.ok) {
-        setHighScore(data.highscore);
+        if (size === 10) setHighScore10(data.highscore);
+        else setHighScore(data.highscore);
       } else {
         console.error('Failed to update high score:', data.message);
       }
@@ -156,11 +159,12 @@ const App: React.FC = () => {
   };
 
   const handleWin = async () => {
-    const newHS = currentScore < highScore || highScore == null;
+    const activeHS = gridSize === 10 ? highScore10 : highScore;
+    const newHS = activeHS == null || currentScore < activeHS;
     setIsNewHighscore(newHS);
     setShowWinPopup(true);
     getHighscore();
-    if (newHS) updateHS();
+    if (newHS) updateHS(gridSize, currentScore);
   };
 
   const handlePlayAgain = () => {
@@ -200,16 +204,17 @@ const App: React.FC = () => {
                     {/* Center — size tabs */}
                     <div className="flex gap-1">
                       {SIZES.map(size => {
-                        const locked = size !== 5;
+                        const locked = size === 15;
+                        const active = gridSize === size;
                         return (
                           <div key={size} className="relative group">
                             <button
                               disabled={locked}
-                              onClick={() => {/* locked sizes are disabled */}}
+                              onClick={() => !locked && handleSizeChange(size)}
                               className={`text-2xl tracking-widest px-3 py-1 border-2 transition-colors duration-100
                                 ${locked
                                   ? "border-gray-700 text-gray-600 cursor-not-allowed"
-                                  : size === 5
+                                  : active
                                     ? "bg-[#c9a227] text-[#0b0b14] border-[#e8b430]"
                                     : "bg-transparent text-[#c9a227] border-[#c9a227] hover:bg-[#c9a227] hover:text-[#0b0b14]"
                                 }`}
@@ -230,7 +235,9 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-3 text-xl">
                       <div className="hidden md:flex flex-col items-end leading-tight">
                         <span className="text-[#e8b430]">{username}</span>
-                        <span className="text-gray-400 text-lg">BEST {highscorePrint}</span>
+                        <span className="text-gray-400 text-lg">
+                          BEST {gridSize === 10 ? highscorePrint10 : highscorePrint}
+                        </span>
                       </div>
                       <button
                         onClick={handleLogout}
@@ -250,11 +257,6 @@ const App: React.FC = () => {
                   {/* ── Main game area ── */}
                   <main className="flex-1 flex flex-col items-center justify-center p-4">
                     <div className="flex flex-col items-center gap-4">
-                      <Timer
-                        resetTimer={resetTimer}
-                        onResetComplete={() => setResetTimer(false)}
-                        onComplete={handleTimerComplete}
-                      />
                       <Grid
                         grid={grid}
                         rowHints={rowHints}
@@ -265,6 +267,11 @@ const App: React.FC = () => {
                       <Buttons
                         onClick={() => generateGame()}
                         onHowToPlayClick={() => setShowHowToPlay(true)}
+                      />
+                      <Timer
+                        resetTimer={resetTimer}
+                        onResetComplete={() => setResetTimer(false)}
+                        onComplete={handleTimerComplete}
                       />
                     </div>
                   </main>

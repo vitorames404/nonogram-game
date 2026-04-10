@@ -5,7 +5,8 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   email: { type: String },
   createdAt: { type: Date, default: Date.now },
-  highscore: { type: String, default: null },
+  highscore: { type: String, default: null },   // 5×5 best
+  highscore10: { type: String, default: null }, // 10×10 best
   alreadyPlayed: { type: Boolean, default: false },
   dailyStartTime: { type: Date, default: null },
   guest: { type: Boolean, default: false },
