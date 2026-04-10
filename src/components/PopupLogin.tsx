@@ -63,6 +63,9 @@ const PopupLogin: React.FC<PopupLoginProps> = ({ onLoginSuccess, onRegister, onG
       {/* Header */}
       <div className="border-b-2 border-[#c9a227] pb-3">
         <h2 className="text-4xl tracking-widest text-[#e8b430]">SIGN IN</h2>
+        <p className="text-base mt-2 pl-2 border-l-2 border-[#c9a227] text-gray-400">
+          NEW? JUST PICK ANY NAME
+        </p>
       </div>
 
       <form onSubmit={handleFormSubmit} className="flex flex-col gap-5">

@@ -150,7 +150,7 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
         onClose={() => navigate("/")}
       />
       {/* Canvas for Stars */}
-      <div className="fixed inset-0 z-0 pointer-events-none bg-gray-900">
+      <div className="fixed inset-0 z-0 pointer-events-none bg-[#0f0f1c]">
         <Canvas>
           <Stars
             radius={100}

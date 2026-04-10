@@ -41,7 +41,7 @@ const Login = () => {
   return (
     <>
       {/* Starfield */}
-      <div className="fixed inset-0 z-0 pointer-events-none bg-[#080810]">
+      <div className="fixed inset-0 z-0 pointer-events-none bg-[#0f0f1c]">
         <Canvas>
           <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
         </Canvas>
