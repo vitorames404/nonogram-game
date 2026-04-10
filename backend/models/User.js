@@ -10,7 +10,10 @@ const userSchema = new mongoose.Schema({
   alreadyPlayed: { type: Boolean, default: false },
   dailyStartTime: { type: Date, default: null },
   guest: { type: Boolean, default: false },
+  isAdmin: { type: Boolean, default: false },
   lastActive: { type: Date, default: Date.now },
+  streak: { type: Number, default: 0 },
+  lastCompletedDate: { type: String, default: null },
 });
 
 // Add the partial index for the email field

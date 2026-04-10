@@ -266,7 +266,17 @@ app.post('/add-ranking', authenticateToken, async (req, res) => {
     const elapsedSeconds = (Date.now() - user.dailyStartTime.getTime()) / 1000;
 
     const date = new Date();
-    await User.findOneAndUpdate({ username }, { lastActive: date });
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    // Update streak
+    if (user.lastCompletedDate === yesterday) {
+      user.streak = (user.streak || 0) + 1;
+    } else if (user.lastCompletedDate !== today) {
+      user.streak = 1;
+    }
+    user.lastCompletedDate = today;
+    user.lastActive = date;
+    await user.save();
 
     const updatedRanking = await Ranking.findOneAndUpdate(
       { username },
@@ -274,7 +284,7 @@ app.post('/add-ranking', authenticateToken, async (req, res) => {
       { upsert: true, new: true }
     );
 
-    res.status(201).json({ message: 'Ranking updated successfully', ranking: updatedRanking });
+    res.status(201).json({ message: 'Ranking updated successfully', ranking: updatedRanking, time: elapsedSeconds, streak: user.streak });
   } catch (err) {
     console.error('Error in /add-ranking:', err);
     res.status(500).json({ message: 'Error updating ranking', error: err.message });
@@ -331,6 +341,7 @@ app.get('/get-userinfo', authenticateToken, async (req, res) => {
       username,
       highscore: user.highscore,
       highscore10: user.highscore10,
+      isAdmin: user.isAdmin ?? false,
     });
   } catch (err) {
     console.error('Error fetching user info:', err);
@@ -462,6 +473,21 @@ app.post('/logout', (req, res) => {
 
 app.get('/protected', authenticateToken, (req, res) => {
   res.status(200).json({ message: 'Access granted to protected route', user: req.user });
+});
+
+// Admin-only middleware
+const requireAdmin = async (req, res, next) => {
+  const user = await User.findOne({ username: req.user.username });
+  if (!user?.isAdmin) return res.status(403).json({ message: 'Admin only' });
+  next();
+};
+
+// Grant admin to a user — only callable by an existing admin
+app.post('/admin/set-admin', authenticateToken, requireAdmin, async (req, res) => {
+  const { username } = req.body;
+  const user = await User.findOneAndUpdate({ username }, { isAdmin: true }, { new: true });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  res.status(200).json({ message: `${username} is now an admin` });
 });
 
 const createGrid = (size) => {

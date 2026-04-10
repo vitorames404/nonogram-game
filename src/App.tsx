@@ -23,13 +23,16 @@ const App: React.FC = () => {
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showWinPopup, setShowWinPopup] = useState(false);
   const [isNewHighscore, setIsNewHighscore] = useState(false);
-  const [highScore, setHighScore] = useState<number>(0);
-  const [highscorePrint, setHighscorePrint] = useState<string>("0:00:00");
+  const [highScore, setHighScore] = useState<number | null>(null);
+  const [highscorePrint, setHighscorePrint] = useState<string>("--");
   const [username, setUsername] = useState<string>("Loading...")
   const [currentScore, setCurrentScore] = useState<number>(0);
+  const [currentScorePrint, setCurrentScorePrint] = useState<string>("0:00:00");
   const [gridSize, setGridSize] = useState<5 | 10 | 15>(5);
-  const [highScore10, setHighScore10] = useState<number>(0);
-  const [highscorePrint10, setHighscorePrint10] = useState<string>("0:00:00");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [solveSignal, setSolveSignal] = useState(0);
+  const [highScore10, setHighScore10] = useState<number | null>(null);
+  const [highscorePrint10, setHighscorePrint10] = useState<string>("--");
 
   const SIZES: (5 | 10 | 15)[] = [5, 10, 15];
 
@@ -38,8 +41,8 @@ const App: React.FC = () => {
     getHighscore();
   }, []);
 
-  useEffect(() => { formatTime(highScore, setHighscorePrint); }, [highScore]);
-  useEffect(() => { formatTime(highScore10, setHighscorePrint10); }, [highScore10]);
+  useEffect(() => { highScore !== null ? formatTime(highScore, setHighscorePrint) : setHighscorePrint("--"); }, [highScore]);
+  useEffect(() => { highScore10 !== null ? formatTime(highScore10, setHighscorePrint10) : setHighscorePrint10("--"); }, [highScore10]);
 
   const generateGame = (size: 5 | 10 | 15 = gridSize) => {
     const newGrid = createGrid(size);
@@ -109,8 +112,9 @@ const App: React.FC = () => {
       });
       const data = await response.json();
       setUsername(data.username);
-      setHighScore(data.highscore ?? 0);
-      setHighScore10(data.highscore10 ?? 0);
+      setHighScore(data.highscore ?? null);
+      setHighScore10(data.highscore10 ?? null);
+      setIsAdmin(data.isAdmin ?? false);
     } catch (err) {
       console.error('Error fetching user info:', err);
     }
@@ -161,6 +165,7 @@ const App: React.FC = () => {
   const handleWin = async () => {
     const activeHS = gridSize === 10 ? highScore10 : highScore;
     const newHS = activeHS == null || currentScore < activeHS;
+    formatTime(currentScore, setCurrentScorePrint);
     setIsNewHighscore(newHS);
     setShowWinPopup(true);
     getHighscore();
@@ -190,7 +195,7 @@ const App: React.FC = () => {
                 <div className="flex flex-col min-h-screen relative z-10 text-white scanlines">
 
                   {/* ── Navbar ── */}
-                  <nav className="font-vt323 w-full flex items-center justify-between px-4 py-2 border-b-2 border-[#c9a227] bg-[#0f0f1c] bg-opacity-90 backdrop-blur-sm sticky top-0 z-20">
+                  <nav className="font-vt323 w-full flex items-center justify-between px-4 py-2 border-b-2 border-[#c9a227] bg-[#0f0f1c] bg-opacity-90 backdrop-blur-sm sticky top-0 z-20 relative">
 
                     {/* Left — title */}
                     <motion.span
@@ -201,8 +206,8 @@ const App: React.FC = () => {
                       NONOGRAM
                     </motion.span>
 
-                    {/* Center — size tabs */}
-                    <div className="flex gap-1">
+                    {/* Center — size tabs (truly centered regardless of side widths) */}
+                    <div className="flex gap-1 absolute left-1/2 -translate-x-1/2">
                       {SIZES.map(size => {
                         const locked = size === 15;
                         const active = gridSize === size;
@@ -231,28 +236,45 @@ const App: React.FC = () => {
                       })}
                     </div>
 
-                    {/* Right — user info + logout */}
-                    <div className="flex items-center gap-3 text-xl">
-                      <div className="hidden md:flex flex-col items-end leading-tight">
-                        <span className="text-[#e8b430]">{username}</span>
-                        <span className="text-gray-400 text-lg">
-                          BEST {gridSize === 10 ? highscorePrint10 : highscorePrint}
-                        </span>
-                      </div>
-                      <button
-                        onClick={handleLogout}
-                        title="Logout"
-                        className="border-2 border-[#c9a227] p-1 hover:bg-[#c9a227] transition-colors group"
-                      >
-                        <img
-                          src={Logout}
-                          alt="Logout"
-                          className="w-5 h-5"
-                          style={{ filter: 'invert(70%) sepia(80%) saturate(400%) hue-rotate(5deg)' }}
-                        />
-                      </button>
-                    </div>
+                    {/* Right — logout only */}
+                    <button
+                      onClick={handleLogout}
+                      title="Logout"
+                      className="border-2 border-[#c9a227] p-1 hover:bg-[#c9a227] transition-colors"
+                    >
+                      <img
+                        src={Logout}
+                        alt="Logout"
+                        className="w-5 h-5"
+                        style={{ filter: 'invert(70%) sepia(80%) saturate(400%) hue-rotate(5deg)' }}
+                      />
+                    </button>
                   </nav>
+
+                  {/* ── Scores card — fixed to right side ── */}
+                  <div className="font-vt323 retro-card fixed right-4 top-1/2 -translate-y-1/2 z-10 p-5 flex-col gap-3 min-w-[170px] hidden md:flex">
+                    <div className="border-b border-[#c9a227] pb-2">
+                      <p className="text-base text-gray-400 tracking-widest uppercase">playing as</p>
+                      <h3 className="text-2xl text-[#e8b430] tracking-widest">{username}</h3>
+                    </div>
+                    <div>
+                      <p className="text-base text-gray-400 tracking-widest uppercase mb-2">highscores</p>
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <p className="text-[#c9a227] tracking-wider">5×5</p>
+                          <p className="text-white text-xl">{highscorePrint}</p>
+                        </div>
+                        <div>
+                          <p className="text-[#c9a227] tracking-wider">10×10</p>
+                          <p className="text-white text-xl">{highscorePrint10}</p>
+                        </div>
+                        <div>
+                          <p className="text-[#c9a227] tracking-wider">15×15</p>
+                          <p className="text-gray-600 text-lg">COMING SOON</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* ── Main game area ── */}
                   <main className="flex-1 flex flex-col items-center justify-center p-4">
@@ -263,11 +285,21 @@ const App: React.FC = () => {
                         colHints={colHints}
                         calculateHints={calculateHints}
                         winCallBack={handleWin}
+                        solveSignal={solveSignal}
                       />
                       <Buttons
                         onClick={() => generateGame()}
                         onHowToPlayClick={() => setShowHowToPlay(true)}
                       />
+                      {isAdmin && (
+                        <button
+                          onClick={() => setSolveSignal(s => s + 1)}
+                          className="font-vt323 text-xl tracking-widest px-4 py-2 border-2 border-red-500 text-red-400 hover:bg-red-500 hover:text-[#0b0b14] transition-colors"
+                          title="Admin: Autocomplete"
+                        >
+                          SOLVE
+                        </button>
+                      )}
                       <Timer
                         resetTimer={resetTimer}
                         onResetComplete={() => setResetTimer(false)}
@@ -283,7 +315,7 @@ const App: React.FC = () => {
                 <WinPopup
                   isVisible={showWinPopup}
                   isNewHighscore={isNewHighscore}
-                  time={highscorePrint}
+                  time={currentScorePrint}
                   onPlayAgain={handlePlayAgain}
                 />
                 {/* Canvas for Stars */}

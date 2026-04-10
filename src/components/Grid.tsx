@@ -6,9 +6,10 @@ interface GridProps {
   colHints: number[][];
   calculateHints: (grid: number[][]) => { rowHints: number[][]; colHints: number[][] };
   winCallBack: () => void;
+  solveSignal?: number; // incrementing this triggers autocomplete
 }
 
-const Grid: React.FC<GridProps> = ({ grid, rowHints, colHints, calculateHints, winCallBack }) => {
+const Grid: React.FC<GridProps> = ({ grid, rowHints, colHints, calculateHints, winCallBack, solveSignal }) => {
   const [answerGrid, setAnswerGrid] = useState<number[][]>([]);
 
   // Refs avoid stale closures — always reflect current drag state without re-renders
@@ -18,6 +19,12 @@ const Grid: React.FC<GridProps> = ({ grid, rowHints, colHints, calculateHints, w
   useEffect(() => {
     setAnswerGrid(createEmptyGrid(grid.length));
   }, [grid]);
+
+  // Admin autocomplete: fill the answer grid with the solution
+  useEffect(() => {
+    if (!solveSignal) return;
+    setAnswerGrid(grid.map(row => row.map(cell => (cell === 1 ? 1 : 0))));
+  }, [solveSignal]);
 
   // End drag on mouseup anywhere on the page — so briefly leaving the grid doesn't break it
   useEffect(() => {

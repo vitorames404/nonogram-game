@@ -4,6 +4,8 @@ import Timer from "../components/Timer";
 import { Canvas } from "@react-three/fiber";
 import { Stars } from "@react-three/drei";
 import DailyChallengeButtons from "../components/DailyChallengeButtons";
+import DailyWinPopup from "../components/DailyWinPopup";
+import { useNavigate } from "react-router-dom";
 
 interface DailyChallengeProps {
   calculateHints: (grid: number[][]) => {
@@ -13,6 +15,7 @@ interface DailyChallengeProps {
 }
 
 const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
+  const navigate = useNavigate();
   const [grid, setGrid] = useState<number[][]>([]);
   const [rowHints, setRowHints] = useState<number[][]>([]);
   const [colHints, setColHints] = useState<number[][]>([]);
@@ -21,6 +24,9 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
   const [error, setError] = useState<string | null>(null);
   const [ranking, setRanking] = useState<{ username: string; time: number }[]>([]);
   const [alreadyPlayed, setAlreadyPlayed] = useState<boolean>(false);
+  const [showWinPopup, setShowWinPopup] = useState(false);
+  const [winTime, setWinTime] = useState<string>("0:00");
+  const [streak, setStreak] = useState<number>(0);
 
   // Helper function to format time in MM:SS format
   const formatTime = (timeInSeconds: number): string => {
@@ -91,18 +97,26 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
     // Time is now computed server-side; nothing to do here
   };
 
+  const formatServerTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const cs = Math.round((seconds % 1) * 100);
+    return `${mins}:${String(secs).padStart(2, "0")}:${String(cs).padStart(2, "0")}`;
+  };
+
   const addRanking = async () => {
     try {
-      // Time is computed server-side from dailyStartTime — we don't send it
       const response = await fetch(`${API_BASE_URL}/add-ranking`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        setWinTime(formatServerTime(data.time));
+        setStreak(data.streak ?? 0);
+      } else {
         const errorData = await response.json();
         console.error('Error adding ranking:', errorData);
       }
@@ -111,10 +125,10 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
     }
   };
 
-  const handleWin = () => {
-    alert("You won the DAILY MODE mode!");
+  const handleWin = async () => {
+    await addRanking();
     fetchRanking();
-    addRanking();
+    setShowWinPopup(true);
   };
 
   useEffect(() => {
@@ -129,6 +143,12 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
 
   return (
     <div className="font-vt323">
+      <DailyWinPopup
+        isVisible={showWinPopup}
+        time={winTime}
+        streak={streak}
+        onClose={() => navigate("/")}
+      />
       {/* Canvas for Stars */}
       <div className="fixed inset-0 z-0 pointer-events-none bg-gray-900">
         <Canvas>
