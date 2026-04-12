@@ -93,10 +93,6 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
     }
   };
 
-  const handleTimerComplete = (_timeTaken: number) => {
-    // Time is now computed server-side; nothing to do here
-  };
-
   const formatServerTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -172,7 +168,6 @@ const DailyChallenge: React.FC<DailyChallengeProps> = ({ calculateHints }) => {
             <Timer
               resetTimer={resetTimer}
               onResetComplete={() => setResetTimer(false)}
-              onComplete={handleTimerComplete}
             />
 
             {/* Display loading or error */}
