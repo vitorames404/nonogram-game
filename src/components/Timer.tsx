@@ -1,17 +1,30 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useImperativeHandle, forwardRef } from "react";
+
+export interface TimerHandle {
+  getTime: () => number;
+}
 
 interface TimerProps {
   resetTimer: boolean;
   onResetComplete: () => void;
-  onComplete?: (timeTaken: number) => void; // Make onComplete optional
+  initialTime?: number;
 }
 
-const Timer: React.FC<TimerProps> = ({ resetTimer, onResetComplete, onComplete }) => {
-  const [time, setTime] = useState(0);
+const Timer = forwardRef<TimerHandle, TimerProps>(({ resetTimer, onResetComplete, initialTime }, ref) => {
+  const [time, setTime] = useState(initialTime ?? 0);
+  const timeRef = useRef(initialTime ?? 0);
+
+  useImperativeHandle(ref, () => ({
+    getTime: () => timeRef.current,
+  }));
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      setTime((prevTime) => prevTime + 1);
+      setTime((prevTime) => {
+        const next = prevTime + 1;
+        timeRef.current = next;
+        return next;
+      });
     }, 10);
 
     return () => clearInterval(intervalId);
@@ -19,17 +32,12 @@ const Timer: React.FC<TimerProps> = ({ resetTimer, onResetComplete, onComplete }
 
   useEffect(() => {
     if (resetTimer) {
-      setTime(0); // Reset the timer to 0
-      onResetComplete(); // Notify parent that reset is complete
+      const initial = initialTime ?? 0;
+      setTime(initial);
+      timeRef.current = initial;
+      onResetComplete();
     }
   }, [resetTimer, onResetComplete]);
-
-  // Call onComplete when the puzzle is solved (if provided)
-  useEffect(() => {
-    if (onComplete && time > 0) {
-      onComplete(time); // Pass the total time to the parent
-    }
-  }, [time, onComplete]);
 
   const hours = Math.floor(time / 360000);
   const minutes = Math.floor((time % 360000) / 6000);
@@ -47,6 +55,6 @@ const Timer: React.FC<TimerProps> = ({ resetTimer, onResetComplete, onComplete }
       </div>
     </div>
   );
-};
+});
 
 export default Timer;

@@ -6,10 +6,12 @@ interface GridProps {
   colHints: number[][];
   calculateHints: (grid: number[][]) => { rowHints: number[][]; colHints: number[][] };
   winCallBack: () => void;
-  solveSignal?: number; // incrementing this triggers autocomplete
+  solveSignal?: number;
+  initialAnswerGrid?: number[][];
+  onAnswerChange?: (answerGrid: number[][]) => void;
 }
 
-const Grid: React.FC<GridProps> = ({ grid, rowHints, colHints, calculateHints, winCallBack, solveSignal }) => {
+const Grid: React.FC<GridProps> = ({ grid, rowHints, colHints, calculateHints, winCallBack, solveSignal, initialAnswerGrid, onAnswerChange }) => {
   const [answerGrid, setAnswerGrid] = useState<number[][]>([]);
 
   // Refs avoid stale closures — always reflect current drag state without re-renders
@@ -17,7 +19,11 @@ const Grid: React.FC<GridProps> = ({ grid, rowHints, colHints, calculateHints, w
   const visitedCells = useRef<Set<string>>(new Set()); // Cells already touched this drag
 
   useEffect(() => {
-    setAnswerGrid(createEmptyGrid(grid.length));
+    if (initialAnswerGrid && initialAnswerGrid.length === grid.length) {
+      setAnswerGrid(initialAnswerGrid);
+    } else {
+      setAnswerGrid(createEmptyGrid(grid.length));
+    }
   }, [grid]);
 
   // Admin autocomplete: fill the answer grid with the solution
@@ -36,6 +42,7 @@ const Grid: React.FC<GridProps> = ({ grid, rowHints, colHints, calculateHints, w
   // Check win on every grid change — uses latest state, not a stale closure
   useEffect(() => {
     if (answerGrid.length === 0) return;
+    onAnswerChange?.(answerGrid);
     const { rowHints: calcRow, colHints: calcCol } = calculateHints(answerGrid);
     if (
       JSON.stringify(calcRow) === JSON.stringify(rowHints) &&

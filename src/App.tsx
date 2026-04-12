@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Grid from "./components/Grid.tsx";
 import Buttons from "./components/Buttons.tsx";
-import Timer from "./components/Timer.tsx";
+import Timer, { TimerHandle } from "./components/Timer.tsx";
 import Login from "./pages/Login.tsx";
 import DailyChallenge from "./pages/DailyChallenge.tsx";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
@@ -15,51 +15,112 @@ import WinPopup from "./components/WinPopup.tsx";
 import {Canvas} from "@react-three/fiber";
 import {Stars} from "@react-three/drei";
 
+const SAVE_KEY_10 = 'nonogram_10x10_save';
+
+interface SavedGame10 {
+  grid: number[][];
+  rowHints: number[][];
+  colHints: number[][];
+  answerGrid: number[][];
+  time: number;
+}
+
 const App: React.FC = () => {
   const [grid, setGrid] = useState<number[][]>([]);
   const [rowHints, setRowHints] = useState<number[][]>([]);
   const [colHints, setColHints] = useState<number[][]>([]);
   const [resetTimer, setResetTimer] = useState(false);
+  const [timerInitialTime, setTimerInitialTime] = useState(0);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [showWinPopup, setShowWinPopup] = useState(false);
   const [isNewHighscore, setIsNewHighscore] = useState(false);
   const [highScore, setHighScore] = useState<number | null>(null);
   const [highscorePrint, setHighscorePrint] = useState<string>("--");
-  const [username, setUsername] = useState<string>("Loading...")
-  const [currentScore, setCurrentScore] = useState<number>(0);
+  const [username, setUsername] = useState<string>("Loading...");
   const [currentScorePrint, setCurrentScorePrint] = useState<string>("0:00:00");
+  const timerRef = useRef<TimerHandle>(null);
   const [gridSize, setGridSize] = useState<5 | 10 | 15>(5);
   const [isAdmin, setIsAdmin] = useState(false);
   const [solveSignal, setSolveSignal] = useState(0);
   const [highScore10, setHighScore10] = useState<number | null>(null);
   const [highscorePrint10, setHighscorePrint10] = useState<string>("--");
+  const [restoredAnswerGrid, setRestoredAnswerGrid] = useState<number[][] | undefined>(undefined);
+  // Ref so beforeunload can access latest answer grid without a stale closure
+  const latestAnswerGridRef = useRef<number[][]>([]);
+  // Ref so beforeunload always calls the latest save function
+  const saveGameRef = useRef<() => void>(() => {});
 
   const SIZES: (5 | 10 | 15)[] = [5, 10, 15];
+  const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:3000';
 
   useEffect(() => {
     generateGame(5);
     getHighscore();
   }, []);
 
+  // Keep saveGameRef up-to-date with the latest grid state
+  useEffect(() => {
+    saveGameRef.current = () => {
+      if (gridSize !== 10 || latestAnswerGridRef.current.length === 0) return;
+      // Only update the save if one already exists (don't save if game was won/reset)
+      if (!localStorage.getItem(SAVE_KEY_10)) return;
+      const save: SavedGame10 = {
+        grid, rowHints, colHints,
+        answerGrid: latestAnswerGridRef.current,
+        time: timerRef.current?.getTime() ?? 0,
+      };
+      localStorage.setItem(SAVE_KEY_10, JSON.stringify(save));
+    };
+  }, [gridSize, grid, rowHints, colHints]);
+
+  // Save to localStorage when the tab is closed/refreshed
+  useEffect(() => {
+    const handleBeforeUnload = () => saveGameRef.current();
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   useEffect(() => { highScore !== null ? formatTime(highScore, setHighscorePrint) : setHighscorePrint("--"); }, [highScore]);
   useEffect(() => { highScore10 !== null ? formatTime(highScore10, setHighscorePrint10) : setHighscorePrint10("--"); }, [highScore10]);
 
   const generateGame = (size: 5 | 10 | 15 = gridSize) => {
+    if (size === 10) localStorage.removeItem(SAVE_KEY_10); // fresh game clears any save
     const newGrid = createGrid(size);
     setGrid(newGrid);
     const { rowHints, colHints } = calculateHints(newGrid);
     setRowHints(rowHints);
     setColHints(colHints);
+    setRestoredAnswerGrid(undefined);
+    setTimerInitialTime(0);
     setResetTimer(true);
   };
 
   const handleSizeChange = (size: 5 | 10 | 15) => {
     setGridSize(size);
     setShowWinPopup(false);
+    if (size === 10) {
+      const raw = localStorage.getItem(SAVE_KEY_10);
+      if (raw) {
+        try {
+          const save: SavedGame10 = JSON.parse(raw);
+          if (
+            !Array.isArray(save.grid) || save.grid.length !== 10 ||
+            !Array.isArray(save.answerGrid) || save.answerGrid.length !== 10
+          ) throw new Error('invalid save dimensions');
+          setGrid(save.grid);
+          setRowHints(save.rowHints);
+          setColHints(save.colHints);
+          setRestoredAnswerGrid(save.answerGrid);
+          setTimerInitialTime(save.time ?? 0);
+          setResetTimer(true);
+          return;
+        } catch {
+          localStorage.removeItem(SAVE_KEY_10); // corrupted/stale save — discard
+        }
+      }
+    }
     generateGame(size);
   };
-
-  const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:3000';
 
   const formatTime = (centiseconds: number, setter: (s: string) => void = setHighscorePrint): void => {
     const minutes = Math.floor((centiseconds / 100) / 60);
@@ -78,28 +139,17 @@ const App: React.FC = () => {
     const calculateLineHints = (line: number[]) => {
       const hints: number[] = [];
       let count = 0;
-
       for (const cell of line) {
-        if (cell === 1) {
-          count += 1;
-        } else if (count > 0) {
-          hints.push(count);
-          count = 0;
-        }
+        if (cell === 1) { count += 1; }
+        else if (count > 0) { hints.push(count); count = 0; }
       }
-
-      if (count > 0) {
-        hints.push(count);
-      }
-
+      if (count > 0) hints.push(count);
       return hints.length > 0 ? hints : [0];
     };
-
     const rowHints = grid.map((row) => calculateLineHints(row));
     const colHints = grid[0].map((_, colIndex) =>
       calculateLineHints(grid.map((row) => row[colIndex]))
     );
-
     return { rowHints, colHints };
   };
 
@@ -144,16 +194,13 @@ const App: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/logout`, {
         method: 'POST',
-        credentials: 'include',  // Ensure cookies are included in the request
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
       });
-  
       if (response.ok) {
         document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
         document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-        window.location.href = "/home";  
+        window.location.href = "/home";
       } else {
         console.error('Failed to logout');
       }
@@ -162,24 +209,35 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAnswerChange = (answerGrid: number[][]) => {
+    latestAnswerGridRef.current = answerGrid;
+    if (gridSize !== 10 || grid.length !== 10 || answerGrid.length !== 10) return;
+    // Don't save until the user has made at least one move
+    if (!answerGrid.some(row => row.some(cell => cell !== 0))) return;
+    const save: SavedGame10 = {
+      grid, rowHints, colHints,
+      answerGrid,
+      time: timerRef.current?.getTime() ?? 0,
+    };
+    localStorage.setItem(SAVE_KEY_10, JSON.stringify(save));
+  };
+
   const handleWin = async () => {
+    const score = timerRef.current?.getTime() ?? 0;
     const activeHS = gridSize === 10 ? highScore10 : highScore;
-    const newHS = activeHS == null || currentScore < activeHS;
-    formatTime(currentScore, setCurrentScorePrint);
+    const newHS = activeHS == null || score < activeHS;
+    formatTime(score, setCurrentScorePrint);
     setIsNewHighscore(newHS);
     setShowWinPopup(true);
+    if (gridSize === 10) localStorage.removeItem(SAVE_KEY_10);
     getHighscore();
-    if (newHS) updateHS(gridSize, currentScore);
+    if (newHS) updateHS(gridSize, score);
   };
 
   const handlePlayAgain = () => {
     setShowWinPopup(false);
     setIsNewHighscore(false);
     generateGame();
-  };
-
-  const handleTimerComplete = (timeTaken: number) => {
-    setCurrentScore(timeTaken);
   };
 
   return (
@@ -286,6 +344,8 @@ const App: React.FC = () => {
                         calculateHints={calculateHints}
                         winCallBack={handleWin}
                         solveSignal={solveSignal}
+                        initialAnswerGrid={restoredAnswerGrid}
+                        onAnswerChange={handleAnswerChange}
                       />
                       <Buttons
                         onClick={() => generateGame()}
@@ -301,9 +361,10 @@ const App: React.FC = () => {
                         </button>
                       )}
                       <Timer
+                        ref={timerRef}
                         resetTimer={resetTimer}
                         onResetComplete={() => setResetTimer(false)}
-                        onComplete={handleTimerComplete}
+                        initialTime={timerInitialTime}
                       />
                     </div>
                   </main>
